@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bhashni Simplified — OCR Translator with History</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    html, body { height: 100%; }
+    body {
+      font-family: 'Poppins', sans-serif;
+      min-height: 100vh;
+      transition: background 0.4s cubic-bezier(.4,0,.2,1);
+    }
+    .fade { transition: all 0.3s cubic-bezier(.4,0,.2,1); }
+    :focus { outline: 2px solid #2563eb; outline-offset: 2px; }
+    .glass {
+      background: rgba(255,255,255,0.08);
+      box-shadow: 0 4px 32px rgba(0,0,0,0.12);
+      backdrop-filter: blur(8px);
+    }
+    @media (max-width: 640px) {
+      .max-w-6xl { max-width: 100vw; }
+      .hide-mobile { display: none!important; }
+      .translator-row { flex-direction: column !important; }
+      .translator-col { width: 100% !important; }
+      #historyPanelBox { width: 100vw !important; left: 0 !important; }
+    }
+    body:not(.day-mode) {
+      background: radial-gradient(circle at top, #21243d 0%, #191b2c 100%);
+    }
+    body.day-mode {
+      background: linear-gradient(135deg,#f7fafc 0%,#e2e8f0 100%);
+      color: #22223b;
+    }
+    body.day-mode .glass {
+      background: rgba(255,255,255,0.30);
+      box-shadow: 0 4px 32px rgba(0,0,0,0.10);
+      border-color: #e2e8f0;
+    }
+    body.day-mode .text-white,
+    body.day-mode .font-semibold.text-white { color: #22223b !important; }
+    body.day-mode .bg-white\/10 { background-color: rgba(0,0,0,0.02)!important; }
+    body.day-mode .bg-blue-900 { background-color: #e2e8f0!important; color: #22223b!important; }
+    body.day-mode .shadow-2xl,
+    body.day-mode .shadow-xl,
+    body.day-mode .shadow-lg { box-shadow: 0 4px 24px rgba(0,0,0,0.08)!important; }
+    body.day-mode .border-white\/10,
+    body.day-mode .border-white\/5 { border-color: #e2e8f0!important; }
+    body.day-mode .rounded-3xl,
+    body.day-mode .rounded-2xl,
+    body.day-mode .rounded-xl,
+    body.day-mode .rounded-lg { border-radius: 1rem!important; }
+    body.day-mode .text-blue-300 { color: #2b6cb0!important; }
+    body.day-mode .bg-blue-500 { background-color: #2b6cb0!important; }
+    body.day-mode .bg-blue-700 { background-color: #2563eb!important; }
+    body.day-mode .bg-blue-800 { background-color: #1e40af!important; }
+    body.day-mode .bg-blue-200,
+    body.day-mode .bg-blue-100 { background-color: #ebf8ff!important; color: #22223b!important; }
+    body.day-mode .bg-gray-100 { background-color: #f7fafc!important; color: #22223b!important; }
+    body.day-mode .bg-gray-200 { background-color: #e2e8f0!important; color: #22223b!important; }
+    body.day-mode .text-gray-400 { color: #4a5568!important; }
+    body.day-mode .text-gray-200 { color: #718096!important; }
+    body.day-mode .text-gray-300 { color: #a0aec0!important; }
+    body.day-mode .text-red-500 { color: #e53e3e!important; }
+    body.day-mode .bg-green-500 { background-color: #38a169!important; }
+    body.day-mode .bg-green-600 { background-color: #2f855a!important; }
+    body.day-mode .bg-red-500 { background-color: #e53e3e!important; }
+    body.day-mode .bg-red-600 { background-color: #c53030!important; }
+    body.day-mode .border-white\/10 { border-color: #e2e8f0!important; }
+    body.day-mode ::placeholder { color: #718096!important; }
+    #historyPanelBox {
+      position: fixed;
+      top: 60px;
+      right: 0;
+      z-index: 100;
+      width: 400px;
+      max-width: 90vw;
+      max-height: 70vh;
+      background: rgba(34,42,63,0.98);
+      border-radius: 1.25rem;
+      box-shadow: 0 8px 48px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.10);
+      display: none;
+      flex-direction: column;
+      transition: opacity .25s cubic-bezier(.4,0,.2,1), transform .25s cubic-bezier(.4,0,.2,1);
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    #historyPanelBox.open {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    body.day-mode #historyPanelBox {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      color: #22223b;
+    }
+    @media (max-width: 640px) {
+      #historyPanelBox {
+        top: 0;
+        height: 100vh;
+        max-height: none;
+        border-radius: 0;
+      }
+    }
+    /* Better focus ring for accessibility */
+    button:focus, select:focus, textarea:focus {
+      outline: 3px solid #2563eb;
+      outline-offset: 3px;
+    }
+    /* Subtle hover transitions for buttons */
+    button, select {
+      transition: box-shadow 0.2s, background 0.2s, color 0.2s;
+    }
+    button:active {
+      transform: scale(0.97);
+    }
+    /* Material icons fix */
+    .material-icons {
+      font-family: 'Material Icons';
+      font-style: normal;
+      font-weight: normal;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-2 text-white">
+
+<main class="glass rounded-3xl shadow-2xl max-w-2xl w-full p-4 md:p-8 space-y-8" aria-label="Translator and History">
+
+  <!-- Translator Panel -->
+  <section class="space-y-8 flex flex-col justify-between" aria-label="Translation panel">
+    <header class="flex justify-between items-center pb-2 border-b border-white/10">
+      <div class="flex items-center gap-2">
+        <img src="https://img.icons8.com/color/48/translation.png" width="36" height="36" alt="Logo" class="rounded-lg shadow-md">
+        <h1 class="text-2xl font-semibold tracking-tight text-white" tabindex="0" aria-label="Bhashni Translator">Bhashni Translator</h1>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-xs text-gray-300 hide-mobile" id="httpsWarn" title="Microphone and Camera need HTTPS or localhost">Mic/Camera require HTTPS or localhost</span>
+        <button id="darkToggle" class="ml-2 text-lg px-2 py-1 bg-white/10 rounded hover:bg-white/20 shadow-sm" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+      </div>
+    </header>
+
+    <div class="flex translator-row gap-6 w-full">
+      <div class="translator-col flex-1 flex flex-col">
+        <label for="src" class="text-gray-400 text-sm mb-2">Source Text</label>
+        <textarea id="src" class="w-full h-44 bg-white/10 text-white rounded-xl p-4 outline-none resize-none border border-white/10 focus:ring-2 focus:ring-blue-400 font-medium placeholder:text-gray-400 mb-2" placeholder="Type, speak, or scan image..."></textarea>
+        <div class="flex gap-2">
+          <button id="speakSrc" class="fade px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 shadow"><span class="material-icons" style="font-size:20px">volume_up</span></button>
+          <button id="copySrc" class="fade px-3 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 shadow"><span class="material-icons" style="font-size:20px">content_copy</span></button>
+          <select id="langFrom" class="bg-white/10 rounded-lg p-2 text-white border border-white/10 focus:ring-2 focus:ring-blue-400 font-semibold"></select>
+        </div>
+      </div>
+      <div class="flex flex-col justify-center items-center px-2">
+        <button id="swap" class="fade px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-700 shadow font-bold">⇄</button>
+      </div>
+      <div class="translator-col flex-1 flex flex-col">
+        <label for="tgt" class="text-gray-400 text-sm mb-2">Translation</label>
+        <textarea id="tgt" class="w-full h-44 bg-white/10 text-white rounded-xl p-4 outline-none resize-none border border-white/10 font-medium placeholder:text-gray-400 mb-2" placeholder="Translation appears here" readonly></textarea>
+        <div class="flex gap-2">
+          <select id="langTo" class="bg-white/10 rounded-lg p-2 text-white border border-white/10 focus:ring-2 focus:ring-blue-400 font-semibold"></select>
+          <button id="speakTgt" class="fade px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 shadow"><span class="material-icons" style="font-size:20px">volume_up</span></button>
+          <button id="copyTgt" class="fade px-3 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 shadow"><span class="material-icons" style="font-size:20px">content_copy</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-4">
+      <button id="translateBtn" class="flex-1 px-5 py-4 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-xl font-semibold text-lg shadow-lg hover:scale-105 transition-transform">Translate</button>
+      <button id="micBtn" class="px-5 py-4 bg-blue-700 rounded-xl font-semibold text-lg shadow-lg hover:bg-blue-800 transition-colors"><span class="material-icons" style="font-size:22px;vertical-align:middle">mic</span> <span class="ml-2 hide-mobile">Speak</span></button>
+    </div>
+
+    <div class="flex flex-wrap gap-4 items-center mt-1" id="cameraControls">
+      <button id="uploadBtn" class="px-4 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 shadow"><span class="material-icons" style="font-size:20px">upload</span></button>
+      <button id="openCamBtn" class="px-4 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 shadow"><span class="material-icons" style="font-size:20px">photo_camera</span></button>
+      <button id="captureBtn" class="px-4 py-3 bg-green-500 text-white rounded-lg font-semibold shadow hover:bg-green-600" disabled>⧉ OCR</button>
+      <button id="closeCamBtn" class="px-4 py-3 bg-red-500 text-white rounded-lg font-semibold shadow hover:bg-red-600" disabled><span class="material-icons" style="font-size:20px">close</span></button>
+      <button id="showHistoryBtn" class="px-4 py-3 bg-blue-900 text-white rounded-lg font-semibold shadow hover:bg-blue-800 flex items-center gap-2"><span class="material-icons" style="font-size:20px">history</span> <span class="hide-mobile">History</span></button>
+      <span class="text-sm text-gray-200 ml-2" id="ocrStatus">OCR: idle</span>
+      <progress id="ocrProgress" max="1" value="0" class="hidden ml-2 h-1 w-40"></progress>
+    </div>
+    <div id="mediaWrap" class="hidden rounded-xl overflow-hidden shadow-lg mt-3">
+      <video id="video" playsinline class="w-full max-h-72 bg-black"></video>
+      <canvas id="canvas" class="hidden"></canvas>
+    </div>
+  </section>
+  <div id="historyPanelBox">
+    <div class="flex justify-between items-center mb-3 px-5 pt-5">
+      <h2 class="text-xl font-semibold flex items-center gap-2"><span class="material-icons" style="font-size:24px;">history</span>History</h2>
+      <button id="closeHistoryPanel" class="text-sm text-red-500 hover:underline font-semibold"><span class="material-icons" style="font-size:20px;">close</span></button>
+    </div>
+    <button id="clearHistoryPanel" class="text-sm text-red-500 hover:underline font-semibold mx-5 mb-2">Clear</button>
+    <div id="historyPanelList" class="flex-1 overflow-y-auto space-y-3 pr-1 text-sm px-5 pb-5" style="min-height:200px;"></div>
+  </div>
+</main>
+
+<input type="file" id="imgInput" accept="image/*" capture="environment" hidden>
+<div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-blue-900 text-white px-6 py-3 rounded-xl shadow-lg z-50 hidden font-semibold text-lg"></div>
+
+<script>
+(() => {
+  //==== Utility ====
+  const $ = id => document.getElementById(id);
+  function debounce(fn, ms=400) {
+    let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
+  }
+
+  //==== Elements ====
+  const src = $('src'), tgt = $('tgt');
+  const langFrom = $('langFrom'), langTo = $('langTo');
+  const translateBtn = $('translateBtn'), micBtn = $('micBtn'), swapBtn = $('swap');
+  const speakSrc = $('speakSrc'), speakTgt = $('speakTgt');
+  const copySrc = $('copySrc'), copyTgt = $('copyTgt');
+  const toast = $('toast'), uploadBtn = $('uploadBtn'), openCamBtn = $('openCamBtn');
+  const captureBtn = $('captureBtn'), closeCamBtn = $('closeCamBtn'), imgInput = $('imgInput');
+  const video = $('video'), canvas = $('canvas'), mediaWrap = $('mediaWrap');
+  const ocrProgress = $('ocrProgress'), ocrStatus = $('ocrStatus');
+  const darkToggle = $('darkToggle');
+  const showHistoryBtn = $('showHistoryBtn'), historyPanelBox = $('historyPanelBox'), closeHistoryPanel = $('closeHistoryPanel'), clearHistoryPanel = $('clearHistoryPanel'), historyPanelList = $('historyPanelList');
+  const httpsWarn = $('httpsWarn');
+
+  //==== HTTPS/camera/mic warning ====
+  const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if (window.location.protocol === "https:" || isLocalhost) {
+    if (httpsWarn) httpsWarn.style.display = "none";
+  }
+
+  //==== Languages ====
+  const LANGS = {
+    "auto":"Auto-detect",
+    "en":"English","hi":"Hindi","as":"Assamese","bn":"Bengali","mni":"Manipuri","bdo":"Bodo","lus":"Mizo","kha":"Khasi","ne":"Nepali",
+    "or":"Odia","pa":"Punjabi","gu":"Gujarati","ta":"Tamil","te":"Telugu","kn":"Kannada","ml":"Malayalam","ur":"Urdu",
+    "es":"Spanish","fr":"French","de":"German","it":"Italian","ru":"Russian","zh":"Chinese","ja":"Japanese","ko":"Korean","ar":"Arabic","pt":"Portuguese"
+  };
+  const TESSERACT_LANG = {en:'eng', hi:'hin', bn:'ben', as:'asm', ne:'nep', pa:'pan', gu:'guj', or:'ori', ta:'tam', te:'tel', kn:'kan', ml:'mal', ur:'urd', ja:'jpn', zh:'chi_sim', ko:'kor', ru:'rus', es:'spa', fr:'fra', de:'deu', it:'ita', ar:'ara', pt:'por'};
+
+  //==== History functions ====
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem('translationHistory') || '[]'); }
+    catch { return []; }
+  }
+  function saveHistory(history) {
+    try { localStorage.setItem('translationHistory', JSON.stringify(history)); } catch{}
+  }
+  function addHistory(fromLang, fromText, toLang, toText) {
+    if(!fromText || !toText) return;
+    let history = getHistory();
+    history.unshift({ fromLang, fromText, toLang, toText, time: Date.now() });
+    if(history.length > 50) history.pop();
+    saveHistory(history);
+    renderHistoryPanel();
+  }
+  function renderHistoryPanel() {
+    historyPanelList.innerHTML = '';
+    let history = getHistory();
+    if (history.length === 0) {
+      historyPanelList.innerHTML = `<div class="text-gray-400 px-2 py-6 text-center">No translations yet.</div>`;
+      return;
+    }
+    history.forEach(item => {
+      let div = document.createElement('div');
+      div.className = 'p-3 bg-white/10 rounded-xl cursor-pointer hover:bg-blue-600/20 transition-colors shadow-sm border border-white/5';
+      div.setAttribute('tabindex', '0');
+      div.setAttribute('aria-label', `${LANGS[item.fromLang] || item.fromLang} to ${LANGS[item.toLang] || item.toLang}: ${item.fromText} → ${item.toText}`);
+      div.innerHTML = `
+        <div class="flex justify-between text-xs text-gray-400 mb-1">
+          <span class="font-semibold">${LANGS[item.fromLang] || item.fromLang}</span>
+          <span>→</span>
+          <span class="font-semibold">${LANGS[item.toLang] || item.toLang}</span>
+        </div>
+        <div class="font-semibold truncate text-white" title="${item.fromText}">${item.fromText}</div>
+        <div class="text-blue-300 truncate mt-1" title="${item.toText}">${item.toText}</div>
+      `;
+      div.onclick = () => {
+        src.value = item.fromText;
+        tgt.value = item.toText;
+        langFrom.value = item.fromLang;
+        langTo.value = item.toLang;
+        src.focus();
+        showToast('Loaded history translation');
+        toggleHistoryPanel(false);
+      };
+      historyPanelList.appendChild(div);
+    });
+  }
+  clearHistoryPanel.onclick = () => { localStorage.removeItem('translationHistory'); renderHistoryPanel(); showToast('History cleared'); };
+
+  function toggleHistoryPanel(forceState) {
+    let open = forceState !== undefined ? forceState : !historyPanelBox.classList.contains("open");
+    if (open) {
+      renderHistoryPanel();
+      historyPanelBox.classList.add("open");
+    } else {
+      historyPanelBox.classList.remove("open");
+    }
+  }
+  showHistoryBtn.onclick = () => toggleHistoryPanel();
+  closeHistoryPanel.onclick = () => toggleHistoryPanel(false);
+  document.addEventListener("mousedown", e => {
+    if(historyPanelBox.classList.contains('open') && !historyPanelBox.contains(e.target) && e.target !== showHistoryBtn) {
+      toggleHistoryPanel(false);
+    }
+  });
+
+  function fillLangs(){
+    for(const [code,label] of Object.entries(LANGS)){
+      const o1 = document.createElement('option'); o1.value = code; o1.text = label;
+      const o2 = o1.cloneNode(true);
+      langFrom.appendChild(o1); langTo.appendChild(o2);
+    }
+    langFrom.value = 'auto'; langTo.value = 'hi';
+  }
+  fillLangs();
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.remove('hidden');
+    setTimeout(()=>toast.classList.add('hidden'), 1800);
+  }
+
+  function speak(text, langCode){
+    if(!text) return;
+    if (!window.speechSynthesis) return showToast('Speech Synthesis not supported');
+    const u = new SpeechSynthesisUtterance(text);
+    if(langCode && langCode!=='auto') u.lang = langCode.split('-')[0];
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  speakSrc.onclick = () => speak(src.value, langFrom.value);
+  speakTgt.onclick = () => speak(tgt.value, langTo.value);
+  copySrc.onclick = () => navigator.clipboard.writeText(src.value).then(()=>showToast('Copied'));
+  copyTgt.onclick = () => navigator.clipboard.writeText(tgt.value).then(()=>showToast('Copied'));
+
+  swapBtn.onclick = () => {
+    [langFrom.value, langTo.value] = [langTo.value, langFrom.value];
+    [src.value, tgt.value] = [tgt.value, src.value];
+    showToast('Swapped');
+    src.focus();
+  };
+
+  //==== Translation ====
+  async function googleTranslate(text, from, to) {
+    let source = from === 'auto' ? 'auto' : from;
+    let target = to;
+    source = source.split('-')[0]; target = target.split('-')[0];
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(source)}&tl=${encodeURIComponent(target)}&dt=t&q=${encodeURIComponent(text)}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Network error");
+      const j = await res.json();
+      let translated = "";
+      if (Array.isArray(j)) {
+        translated = j[0].map(r=>r[0]).join("");
+      }
+      return translated || "";
+    } catch(e) {
+      // fallback to LibreTranslate
+      try {
+        const res = await fetch('https://libretranslate.de/translate', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({q: text, source, target})
+        });
+        const j = await res.json();
+        return j.translatedText || '';
+      } catch(e2) {
+        return '';
+      }
+    }
+  }
+  translateBtn.onclick = async () => {
+    if(!src.value.trim()) return showToast('Enter or OCR some text');
+    translateBtn.disabled = true; translateBtn.textContent = 'Translating...';
+    try {
+      const translation = await googleTranslate(src.value.trim(), langFrom.value, langTo.value);
+      tgt.value = translation;
+      addHistory(langFrom.value, src.value.trim(), langTo.value, translation);
+      showToast('Translated');
+    } catch(e){ showToast('Translation failed.'); }
+    finally { translateBtn.disabled = false; translateBtn.textContent = 'Translate'; }
+  };
+  src.addEventListener('input', debounce(() => { tgt.value = ''; }, 300));
+
+  //==== Mic ====
+  const supportsSTT = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
+  let recog = null, isListening = false;
+  if(supportsSTT && (window.location.protocol === "https:" || isLocalhost)){
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recog = new Rec();
+    recog.interimResults = true;
+    recog.onresult = e => { src.value = Array.from(e.results).map(r => r[0].transcript).join(''); };
+    recog.onend = () => { isListening=false; micBtn.classList.remove('bg-red-500'); micBtn.classList.add('bg-blue-700'); micBtn.innerHTML='<span class="material-icons" style="font-size:22px;vertical-align:middle">mic</span> <span class="ml-2 hide-mobile">Speak</span>'; };
+  } else { micBtn.style.display = 'none'; }
+  micBtn.onclick = () => {
+    if(!supportsSTT) return showToast('No speech recognition support');
+    if(!(window.location.protocol === "https:" || isLocalhost)) return showToast('Speech Recognition needs HTTPS or localhost');
+    if(isListening){ recog.stop(); isListening=false; micBtn.classList.remove('bg-red-500'); micBtn.classList.add('bg-blue-700'); micBtn.innerHTML='<span class="material-icons" style="font-size:22px;vertical-align:middle">mic</span> <span class="ml-2 hide-mobile">Speak</span>'; return; }
+    recog.lang = (langFrom.value === 'auto') ? 'en-US' : langFrom.value.split('-')[0];
+    src.value = ''; recog.start(); isListening=true; micBtn.classList.remove('bg-blue-700'); micBtn.classList.add('bg-red-500'); micBtn.innerHTML='<span class="material-icons" style="font-size:22px;vertical-align:middle">mic</span> <span class="ml-2 hide-mobile">Listening…</span>';
+  };
+
+  //==== Camera / OCR ====
+  let stream = null;
+  function setOCRState(text, progress=null){
+    ocrStatus.textContent = text;
+    ocrProgress.classList.toggle('hidden', progress===null);
+    if(progress!==null) ocrProgress.value = progress;
+  }
+  uploadBtn.onclick = () => imgInput.click();
+  imgInput.onchange = e => { if(e.target.files[0]) ocrFile(e.target.files[0]); };
+  openCamBtn.onclick = async () => {
+    if(!(window.location.protocol === "https:" || isLocalhost)) return showToast('Camera needs HTTPS or localhost');
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      video.srcObject = stream; await video.play();
+      mediaWrap.classList.remove('hidden');
+      captureBtn.disabled=false; closeCamBtn.disabled=false;
+    }
+    catch{ showToast('Camera error'); }
+  };
+  closeCamBtn.onclick = () => {
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mediaWrap.classList.add('hidden'); captureBtn.disabled=true; closeCamBtn.disabled=true; }
+  };
+  captureBtn.onclick = () => {
+    if(!video.videoWidth) return;
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0);
+    canvas.toBlob(b=>ocrFile(b),'image/jpeg',0.9);
+  };
+  async function ocrFile(fileOrBlob){
+    try{
+      setOCRState('OCR: loading', 0);
+      const preferLang = TESSERACT_LANG[(langFrom.value==='auto'?'en':langFrom.value.split('-')[0])] || 'eng';
+      const worker = await Tesseract.createWorker(preferLang, 1, {logger: m => { if(m.status) setOCRState(`OCR: ${m.status}`, m.progress); }});
+      const { data: { text } } = await worker.recognize(fileOrBlob);
+      await worker.terminate();
+      src.value = text.trim();
+      setOCRState('OCR: done', null);
+      translateBtn.click();
+    }catch{ showToast('OCR failed'); setOCRState('OCR: error', null); }
+  }
+
+  //==== Dark/Day Mode Toggle ====
+  let darkMode = true;
+  function setDarkMode(on) {
+    darkMode = on;
+    document.body.classList.toggle('day-mode', !darkMode);
+    document.body.classList.toggle('text-white', darkMode);
+    document.body.classList.toggle('text-black', !darkMode);
+    darkToggle.textContent = darkMode ? "🌙" : "☀️";
+    showToast(darkMode ? 'Dark mode!' : 'Day mode!');
+  }
+  darkToggle.onclick = () => setDarkMode(!darkMode);
+
+  document.body.addEventListener('keydown', e => {
+    if (e.key === "Escape") {
+      closeCamBtn.click();
+      toast.classList.add('hidden');
+      toggleHistoryPanel(false);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") translateBtn.click();
+  });
+
+  renderHistoryPanel();
+  setDarkMode(true);
+})();
+</script>
+</body>
+</html>
